@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from '../src/components/Icon';
 import { useApp } from '../context/AppState';
 import { COUNTRY_CODES, type CountryCode } from '../src/constants';
@@ -20,8 +21,9 @@ import { colors, fontSize, spacing, borderRadius } from '../src/theme';
 
 type LoginMethod = 'password' | 'phone';
 
-export default function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
-  const { t, lang, setLang, setCurrentScreen } = useApp();
+export default function LoginScreen() {
+  const navigation = useNavigation();
+  const { t, lang, setLang, setUser } = useApp();
   const [method, setMethod] = useState<LoginMethod>('password');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(COUNTRY_CODES[0]);
@@ -69,7 +71,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: User) => void
           (profile.picture as string) ||
           'https://picsum.photos/seed/default/200',
       };
-      onLogin(user);
+      setUser(user);
     } catch (err: unknown) {
       const e = err as { response?: { status?: number }; message?: string };
       if (e.response?.status && e.response.status >= 500) {
@@ -182,14 +184,14 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: User) => void
             )}
           </Pressable>
 
-          <Pressable onPress={() => setCurrentScreen('reset_password')} style={styles.resetLink}>
+          <Pressable onPress={() => navigation.navigate('ResetPassword', { title: t.resetPassword })} style={styles.resetLink}>
             <Text style={styles.resetLinkText}>{lang === 'en' ? 'RESET PASSWORD' : '重置密码'}</Text>
           </Pressable>
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>{lang === 'en' ? 'New to CoRide?' : '还没有账号？'}</Text>
-          <Pressable onPress={() => setCurrentScreen('register')}>
+          <Pressable onPress={() => navigation.navigate('Register', { title: t.register })}>
             <Text style={styles.footerLink}>{t.register}</Text>
           </Pressable>
         </View>

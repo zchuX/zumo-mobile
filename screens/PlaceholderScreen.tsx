@@ -1,15 +1,23 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import Header from '../src/components/Header';
 import { colors, fontSize } from '../src/theme';
 
+type PlaceholderParams = { title?: string };
+
 export default function PlaceholderScreen({
-  title,
-  onBack,
+  title: titleProp,
+  onBack: onBackProp,
 }: {
-  title: string;
-  onBack: () => void;
-}) {
+  title?: string;
+  onBack?: () => void;
+} = {}) {
+  const navigation = useNavigation();
+  const route = useRoute<RouteProp<{ params?: PlaceholderParams }, 'params'>>();
+  const title = route.params?.title ?? titleProp ?? 'Screen';
+  const onBack = onBackProp ?? (() => navigation.goBack());
+
   return (
     <View style={styles.container}>
       <Header title={title} onBack={onBack} />

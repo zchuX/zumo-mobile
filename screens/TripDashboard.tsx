@@ -8,6 +8,9 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TripsStackParamList } from '../navigation/types';
 import Icon from '../src/components/Icon';
 import Loading from '../src/components/Loading';
 import { useApp } from '../context/AppState';
@@ -15,6 +18,8 @@ import { useUncompletedTrips, useCompletedTrips, useLeaveTrip } from '../src/hoo
 import type { Trip } from '../src/types';
 import { TripStatus } from '../src/types';
 import { colors, fontSize, spacing, borderRadius } from '../src/theme';
+
+type TripDashboardNav = NativeStackNavigationProp<TripsStackParamList, 'TripDashboard'>;
 
 const formatTripDateOnly = (dateStr: string, lang: string) => {
   const date = new Date(dateStr);
@@ -34,16 +39,9 @@ const formatCollapseTime = (dateStr: string, timeRange: string) => {
   return `${y}/${m}/${d}, ${startTime}`;
 };
 
-export default function TripDashboard({
-  onSelectTrip,
-  onSelectInvitation,
-  onSearch,
-}: {
-  onSelectTrip: (id: string) => void;
-  onSelectInvitation: (trip: Trip, type: 'driver' | 'passenger', inviter: string, group?: string) => void;
-  onSearch: () => void;
-}) {
-  const { t, lang, user, dashboardShowHistory, setDashboardShowHistory } = useApp();
+export default function TripDashboard() {
+  const navigation = useNavigation<TripDashboardNav>();
+  const { t, lang, user, dashboardShowHistory, setDashboardShowHistory, setSelectedTripId, setBriefTrip, setInvitationDetails } = useApp();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [swipedId, setSwipedId] = useState<string | null>(null);
 
@@ -99,9 +97,12 @@ export default function TripDashboard({
       }
       if (isInvitation) {
         const inviter = trip.participants.find((p) => p.confirmed)?.user.name ?? 'Someone';
-        onSelectInvitation(trip, 'passenger', inviter);
+        setBriefTrip(trip);
+        setInvitationDetails({ type: 'passenger', inviterName: inviter });
+        navigation.navigate('TripInvitation');
       } else {
-        onSelectTrip(trip.id);
+        setSelectedTripId(trip.id);
+        navigation.navigate('TripDetail', { tripId: trip.id, title: 'Trip Detail' });
       }
     };
 
@@ -178,7 +179,7 @@ export default function TripDashboard({
     const startTime = trip.timeRange.split(' - ')[0];
     const isCompleted = trip.status === TripStatus.COMPLETED;
     return (
-      <Pressable key={trip.id} onPress={() => onSelectTrip(trip.id)} style={({ pressed }) => [styles.historyRow, pressed && styles.historyRowPressed]}>
+      <Pressable key={trip.id} onPress={() => { setSelectedTripId(trip.id); navigation.navigate('TripDetail', { tripId: trip.id, title: 'Trip Detail' }); }} style={({ pressed }) => [styles.historyRow, pressed && styles.historyRowPressed]}>
         <View style={styles.historyLeft}>
           <Text style={styles.historyDate}>{displayDate} {startTime}</Text>
           <View style={styles.historyRoute}>
@@ -211,7 +212,7 @@ export default function TripDashboard({
           <Icon name={dashboardShowHistory ? 'event' : 'history'} size={20} color={colors.white} />
         </Pressable>
         <Text style={styles.headerTitle}>{dashboardShowHistory ? t.pastTrips : t.myTrips}</Text>
-        <Pressable onPress={onSearch} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+        <Pressable onPress={() => navigation.navigate('TripSearch')} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
           <Icon name="search" size={20} color={colors.white} />
         </Pressable>
       </View>
@@ -259,7 +260,7 @@ export default function TripDashboard({
                 )}
               </View>
             </View>
-            <Pressable onPress={onSearch} style={({ pressed }) => [styles.joinTripBtn, pressed && styles.pressed]}>
+            <Pressable onPress={() => navigation.navigate('TripSearch')} style={({ pressed }) => [styles.joinTripBtn, pressed && styles.pressed]}>
               <Text style={styles.joinTripBtnText}>{t.joinTrip}</Text>
             </Pressable>
             <View style={{ height: 40 }} />

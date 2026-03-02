@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Linking, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Header from '../src/components/Header';
 import Icon from '../src/components/Icon';
 import { useApp } from '../context/AppState';
 import { colors, fontSize, spacing, borderRadius } from '../src/theme';
 
-export default function SupportScreen({ onBack }: { onBack: () => void }) {
+export default function SupportScreen() {
+  const navigation = useNavigation();
   const { t, lang } = useApp();
   const [feedback, setFeedback] = useState('');
   const insets = useSafeAreaInsets();
@@ -21,7 +23,7 @@ export default function SupportScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 40 }]}>
-      <Header title={t.contactUs} onBack={onBack} />
+      <Header title={t.contactUs} onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
