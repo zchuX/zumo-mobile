@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { TripsStackParamList } from '../navigation/types';
 import Icon from '../src/components/Icon';
@@ -41,13 +42,27 @@ const formatCollapseTime = (dateStr: string, timeRange: string) => {
 
 export default function TripDashboard() {
   const navigation = useNavigation<TripDashboardNav>();
+  const insets = useSafeAreaInsets();
   const { t, lang, user, dashboardShowHistory, setDashboardShowHistory, setSelectedTripId, setBriefTrip, setInvitationDetails } = useApp();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [swipedId, setSwipedId] = useState<string | null>(null);
 
-  const { data: uncompletedTripsData, isLoading: isLoadingUncompleted } = useUncompletedTrips();
-  const { data: completedTripsData, isLoading: isLoadingCompleted } = useCompletedTrips();
+  const { data: uncompletedTripsData, isLoading: isLoadingUncompleted, isError: isErrorUncompleted, error: errorUncompleted, refetch: refetchUncompleted } = useUncompletedTrips();
+  const { data: completedTripsData, isLoading: isLoadingCompleted, isError: isErrorCompleted, error: errorCompleted, refetch: refetchCompleted } = useCompletedTrips();
   const leaveTripMutation = useLeaveTrip();
+
+  useEffect(() => {
+    console.log('[TripDashboard] trip query state', {
+      isLoadingUncompleted,
+      isLoadingCompleted,
+      isErrorUncompleted,
+      isErrorCompleted,
+      uncompletedCount: uncompletedTripsData?.length ?? 0,
+      completedCount: completedTripsData?.length ?? 0,
+      errorUncompleted: errorUncompleted instanceof Error ? errorUncompleted.message : errorUncompleted,
+      errorCompleted: errorCompleted instanceof Error ? errorCompleted.message : errorCompleted,
+    });
+  }, [isLoadingUncompleted, isLoadingCompleted, isErrorUncompleted, isErrorCompleted, uncompletedTripsData?.length, completedTripsData?.length, errorUncompleted, errorCompleted]);
 
   const inProgressTrips = (uncompletedTripsData ?? []).filter((tr: Trip) => tr.status === TripStatus.IN_PROGRESS);
   const upcomingTrips = (uncompletedTripsData ?? []).filter(
@@ -205,9 +220,21 @@ export default function TripDashboard() {
     );
   }
 
+  const isError = isErrorUncompleted || isErrorCompleted;
+  if (isError) {
+    return (
+      <View style={styles.loadingWrap}>
+        <Text style={styles.errorText}>{lang === 'zh' ? '加载行程失败，请重试' : 'Failed to load trips'}</Text>
+        <Pressable onPress={() => { refetchUncompleted(); refetchCompleted(); }} style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}>
+          <Text style={styles.retryBtnText}>{lang === 'zh' ? '重试' : 'Retry'}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.p4 }]}>
         <Pressable onPress={() => setDashboardShowHistory(!dashboardShowHistory)} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
           <Icon name={dashboardShowHistory ? 'event' : 'history'} size={20} color={colors.white} />
         </Pressable>
@@ -274,12 +301,14 @@ export default function TripDashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white, paddingBottom: 40 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.white },
+  errorText: { fontSize: fontSize.sm, color: colors.slate[600], marginBottom: spacing.p4, textAlign: 'center' },
+  retryBtn: { paddingHorizontal: spacing.p5, paddingVertical: spacing.py3, backgroundColor: colors.sage, borderRadius: borderRadius.ios },
+  retryBtnText: { color: colors.white, fontWeight: '700', fontSize: fontSize.sm },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.p6,
-    paddingTop: spacing.p8,
     paddingBottom: spacing.py3,
     backgroundColor: colors.sage,
     shadowColor: colors.black,

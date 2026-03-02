@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { TRANSLATIONS } from '../src/constants';
-import type { User, Language, Trip } from '../src/types';
+import { TRANSLATIONS, MOCK_VEHICLES } from '../src/constants';
+import type { User, Language, Trip, Vehicle } from '../src/types';
 
 export interface AppStateContextValue {
   user: User | null;
@@ -28,11 +28,28 @@ export interface AppStateContextValue {
   setBriefTrip: (t: Trip | null) => void;
   invitationDetails: { type: 'driver' | 'passenger'; inviterName: string; groupName?: string } | null;
   setInvitationDetails: (d: typeof initialInvitation) => void;
+  // Same as web App context
+  vehicles: Vehicle[];
+  setVehicles: React.Dispatch<React.SetStateAction<Vehicle[]>>;
+  friendIds: Set<string>;
+  setFriendIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  pendingRequestIds: Set<string>;
+  setPendingRequestIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  incomingRequestIds: Set<string>;
+  setIncomingRequestIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  nicknames: Record<string, string>;
+  setNicknames: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  notes: Record<string, string>;
+  setNotes: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 const initialInvitation = null as AppStateContextValue['invitationDetails'];
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
+
+const defaultFriendIds = new Set<string>(['user:sarah_j', 'user:alen_w', 'user:jane_c', 'user:kevin_d']);
+const defaultPendingRequestIds = new Set<string>(['user:michael_w']);
+const defaultIncomingRequestIds = new Set<string>(['user:luna_z', 'driver_alex']);
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -47,6 +64,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [selectedGroupArn, setSelectedGroupArn] = useState<string | null>(null);
   const [briefTrip, setBriefTrip] = useState<Trip | null>(null);
   const [invitationDetails, setInvitationDetails] = useState<AppStateContextValue['invitationDetails']>(initialInvitation);
+  const [vehicles, setVehicles] = useState<Vehicle[]>((MOCK_VEHICLES as Vehicle[]).slice());
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set(defaultFriendIds));
+  const [pendingRequestIds, setPendingRequestIds] = useState<Set<string>>(new Set(defaultPendingRequestIds));
+  const [incomingRequestIds, setIncomingRequestIds] = useState<Set<string>>(new Set(defaultIncomingRequestIds));
+  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const t = useMemo(() => TRANSLATIONS[lang] ?? TRANSLATIONS.en, [lang]);
 
@@ -77,6 +100,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setBriefTrip,
       invitationDetails,
       setInvitationDetails,
+      vehicles,
+      setVehicles,
+      friendIds,
+      setFriendIds,
+      pendingRequestIds,
+      setPendingRequestIds,
+      incomingRequestIds,
+      setIncomingRequestIds,
+      nicknames,
+      setNicknames,
+      notes,
+      setNotes,
     }),
     [
       user,
@@ -92,6 +127,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       selectedGroupArn,
       briefTrip,
       invitationDetails,
+      vehicles,
+      friendIds,
+      pendingRequestIds,
+      incomingRequestIds,
+      nicknames,
+      notes,
     ]
   );
 

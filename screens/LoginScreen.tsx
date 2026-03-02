@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from '../src/components/Icon';
 import { useApp } from '../context/AppState';
@@ -23,6 +24,7 @@ type LoginMethod = 'password' | 'phone';
 
 export default function LoginScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { t, lang, setLang, setUser } = useApp();
   const [method, setMethod] = useState<LoginMethod>('password');
   const [showPassword, setShowPassword] = useState(false);
@@ -88,11 +90,11 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + spacing.p8 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.langWrap}>
+        <View style={[styles.langWrap, { top: insets.top + 8 }]}>
           <Pressable onPress={() => setLang(lang === 'en' ? 'zh' : 'en')} style={({ pressed }) => [styles.langBtn, pressed && styles.pressed]}>
             <Icon name="language" size={14} color={colors.slate[600]} />
             <Text style={styles.langText}>{lang === 'en' ? '中文' : 'English'}</Text>
@@ -223,7 +225,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  scrollContent: { flexGrow: 1, paddingHorizontal: spacing.p8, paddingTop: 96, paddingBottom: spacing.p8 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: spacing.p8 },
   langWrap: { position: 'absolute', top: 48, right: spacing.p8, zIndex: 10 },
   langBtn: {
     flexDirection: 'row',

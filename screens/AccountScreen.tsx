@@ -66,7 +66,7 @@ export default function AccountScreen() {
         <View style={styles.menuSection}>
           <Text style={styles.menuLabel}>{lang === 'zh' ? '常规设置' : 'GENERAL'}</Text>
           <View style={styles.menuCard}>
-            <Pressable onPress={() => onNavigate('manage_account')} style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}>
+            <Pressable onPress={() => navigation.navigate('ManageAccount')} style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}>
               <View style={styles.menuRowLeft}>
                 <View style={styles.menuIconBox}>
                   <Icon name="badge" size={18} color={colors.slate[400]} />

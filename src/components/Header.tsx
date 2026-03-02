@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { colors, fontSize, spacing } from '../theme';
 
@@ -10,8 +11,9 @@ interface HeaderProps {
 }
 
 export default function Header({ title, onBack, rightElement }: HeaderProps) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + spacing.p4 }]}>
       <View style={styles.side}>
         {onBack ? (
           <Pressable onPress={onBack} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
@@ -35,7 +37,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.p6,
-    paddingTop: spacing.p8,
     paddingBottom: spacing.py3,
     backgroundColor: colors.sage,
     shadowColor: colors.black,

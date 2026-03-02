@@ -17,12 +17,16 @@ function getClient(): AxiosInstance {
         if (idToken && config.url !== '/auth/logout') {
           config.headers.Authorization = `Bearer ${idToken}`;
         }
+        console.log('[apiClient] request', { method: config.method, url: config.url, hasAuth: !!idToken });
         return config;
       },
       (error) => Promise.reject(error)
     );
     apiClient.interceptors.response.use(
-      (response: AxiosResponse) => response.data,
+      (response: AxiosResponse) => {
+        console.log('[apiClient] response', { status: response.status, url: response.config?.url });
+        return response.data;
+      },
       responseErrorHandler
     );
   }
@@ -30,11 +34,12 @@ function getClient(): AxiosInstance {
 }
 
 function responseErrorHandler(error: AxiosError) {
-
+  const url = error.config?.url ?? 'unknown';
   if (error.response) {
     const status = error.response.status;
     const data = error.response.data as Record<string, unknown> | undefined;
     const message = typeof data?.message === 'string' ? data.message : undefined;
+    console.warn('[apiClient] response error', { url, status, message, data: data ? Object.keys(data) : [] });
     switch (status) {
       case 401:
         tokenStorage.clearTokensAsync().catch(() => {});
@@ -58,9 +63,11 @@ function responseErrorHandler(error: AxiosError) {
         return Promise.reject(new Error(msg));
       }
       default:
+        console.warn('[apiClient] unhandled response error', { url, status });
         return Promise.reject(error);
     }
   }
+  console.warn('[apiClient] request error (no response)', { url, message: error.message });
   return Promise.reject(error);
 }
 

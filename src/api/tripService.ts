@@ -143,36 +143,45 @@ export interface UpdateUserGroupParams {
   numAnonymousUsers?: number | null;
 }
 
+function getMockTripListItems(completed: boolean): UserTripListItem[] {
+  return (MOCK_TRIPS as TripMetadata[]).map((t) => ({
+    tripArn: t.tripArn,
+    startTime: t.startTime,
+    status: t.status,
+    start: t.locations[0]?.locationName ?? '',
+    destination: t.locations[t.locations.length - 1]?.locationName ?? '',
+    isDriver: (t.driver ?? '').replace('user:', '') === 'user-1' || t.driver === 'user_1',
+    driverConfirmed: t.driverConfirmed ?? false,
+    userTripArn: `mock-utrip-${t.tripArn}`,
+    userTripStatus: (t as TripMetadata & { userTripStatus?: string }).userTripStatus ?? '',
+  })).filter((t) => (completed ? t.status === 'Completed' : t.status !== 'Completed'));
+}
+
+const TRIP_LOAD_LOG = '[TripService.listTrips]';
+
 export const listTrips = async (params: ListTripsParams): Promise<{ trips: UserTripListItem[] }> => {
+  const isCompleted = params.completed;
+  const mockTrips = getMockTripListItems(isCompleted);
+  console.log(TRIP_LOAD_LOG, 'called', { completed: isCompleted, mockCount: mockTrips.length });
   try {
-    const response = await api.get<{ trips: UserTripListItem[] }>('/api/trips', { params });
-    const isCompleted = params.completed;
-    const filteredMocks = (MOCK_TRIPS as TripMetadata[]).map((t) => ({
-      tripArn: t.tripArn,
-      startTime: t.startTime,
-      status: t.status,
-      start: t.locations[0]?.locationName ?? '',
-      destination: t.locations[t.locations.length - 1]?.locationName ?? '',
-      isDriver: t.driver === 'user_1',
-      driverConfirmed: t.driverConfirmed ?? false,
-      userTripArn: `mock-utrip-${t.tripArn}`,
-      userTripStatus: (t as TripMetadata & { userTripStatus?: string }).userTripStatus ?? '',
-    })).filter((t) => (isCompleted ? t.status === 'Completed' : t.status !== 'Completed'));
-    return { trips: [...filteredMocks, ...response.trips] };
-  } catch (error) {
-    const isCompleted = params.completed;
-    const filteredMocks = (MOCK_TRIPS as TripMetadata[]).map((t) => ({
-      tripArn: t.tripArn,
-      startTime: t.startTime,
-      status: t.status,
-      start: t.locations[0]?.locationName ?? '',
-      destination: t.locations[t.locations.length - 1]?.locationName ?? '',
-      isDriver: t.driver === 'user_1',
-      driverConfirmed: t.driverConfirmed ?? false,
-      userTripArn: `mock-utrip-${t.tripArn}`,
-      userTripStatus: (t as TripMetadata & { userTripStatus?: string }).userTripStatus ?? '',
-    })).filter((t) => (isCompleted ? t.status === 'Completed' : t.status !== 'Completed'));
-    return { trips: filteredMocks };
+    const response = await api.get<{ trips?: UserTripListItem[] }>('/api/trips', { params });
+    const apiTrips = Array.isArray(response?.trips) ? response.trips : [];
+    console.log(TRIP_LOAD_LOG, 'API success', {
+      completed: isCompleted,
+      apiTripCount: apiTrips.length,
+      totalCount: mockTrips.length + apiTrips.length,
+      responseKeys: response ? Object.keys(response) : [],
+    });
+    return { trips: [...mockTrips, ...apiTrips] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.warn(TRIP_LOAD_LOG, 'API failed, using mock trips', {
+      completed: isCompleted,
+      error: message,
+      stack: stack?.split('\n').slice(0, 3).join('\n'),
+    });
+    return { trips: mockTrips };
   }
 };
 

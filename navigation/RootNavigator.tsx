@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as authService from '../src/api/authService';
@@ -69,6 +69,24 @@ export default function RootNavigator() {
           text: colors.slate[900],
           border: colors.slate[200],
           notification: colors.sage,
+        },
+        fonts: {
+          regular: {
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+            fontWeight: '400' as const,
+          },
+          medium: {
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+            fontWeight: '500' as const,
+          },
+          bold: {
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+            fontWeight: '600' as const,
+          },
+          heavy: {
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+            fontWeight: '700' as const,
+          },
         },
       }}
     >

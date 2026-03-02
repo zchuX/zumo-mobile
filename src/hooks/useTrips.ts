@@ -14,12 +14,23 @@ import { TripStatus } from '../types';
 import { useApp } from '../AppContext';
 import { mapUserTripListItemToFrontend, mapBackendTripToFrontend } from '../utils/tripMappers';
 
+const TRIP_HOOK_LOG = '[useTrips]';
+
 export function useUncompletedTrips() {
   return useQuery({
     queryKey: tripKeys.list('uncompleted'),
     queryFn: async () => {
-      const response = await tripService.listTrips({ completed: false });
-      return response.trips.map(mapUserTripListItemToFrontend);
+      console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: fetching...');
+      try {
+        const response = await tripService.listTrips({ completed: false });
+        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: listTrips returned', { tripCount: response.trips?.length ?? 0 });
+        const mapped = response.trips.map(mapUserTripListItemToFrontend);
+        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: mapped', { count: mapped.length });
+        return mapped;
+      } catch (err) {
+        console.error(TRIP_HOOK_LOG, 'useUncompletedTrips: queryFn error', err);
+        throw err;
+      }
     },
     staleTime: 15 * 1000,
   });
@@ -29,8 +40,17 @@ export function useCompletedTrips() {
   return useQuery({
     queryKey: tripKeys.list('completed'),
     queryFn: async () => {
-      const response = await tripService.listTrips({ completed: true });
-      return response.trips.map(mapUserTripListItemToFrontend);
+      console.log(TRIP_HOOK_LOG, 'useCompletedTrips: fetching...');
+      try {
+        const response = await tripService.listTrips({ completed: true });
+        console.log(TRIP_HOOK_LOG, 'useCompletedTrips: listTrips returned', { tripCount: response.trips?.length ?? 0 });
+        const mapped = response.trips.map(mapUserTripListItemToFrontend);
+        console.log(TRIP_HOOK_LOG, 'useCompletedTrips: mapped', { count: mapped.length });
+        return mapped;
+      } catch (err) {
+        console.error(TRIP_HOOK_LOG, 'useCompletedTrips: queryFn error', err);
+        throw err;
+      }
     },
     staleTime: 2 * 60 * 60 * 1000,
   });
