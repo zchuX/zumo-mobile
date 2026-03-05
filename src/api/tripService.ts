@@ -61,7 +61,6 @@ export interface UserGroupRecord {
   destination: string;
   pickupTime: number;
   version: number;
-  numAnonymousUsers: number;
   users: GroupUser[];
 }
 
@@ -130,7 +129,6 @@ export interface CreateUserGroupParams {
   start: string;
   destination: string;
   pickupTime: number;
-  numAnonymousUsers: number;
   users: GroupUser[];
 }
 
@@ -140,7 +138,6 @@ export interface UpdateUserGroupParams {
   destination?: string | null;
   pickupTime?: number | null;
   users?: GroupUser[] | null;
-  numAnonymousUsers?: number | null;
 }
 
 function getMockTripListItems(completed: boolean): UserTripListItem[] {
@@ -235,8 +232,13 @@ export const createUserGroup = async (params: CreateUserGroupParams): Promise<Us
   return api.post<UserGroupRecord>('/api/user-groups', params);
 };
 
+const USER_GROUP_LOG = '[TripService.updateUserGroup]';
+
 export const updateUserGroup = async (groupArn: string, params: UpdateUserGroupParams): Promise<UserGroupRecord> => {
-  return api.put<UserGroupRecord>(`/api/user-groups/${encodeURIComponent(groupArn)}`, params);
+  const url = `/api/user-groups/${encodeURIComponent(groupArn)}`;
+  const body = { ...params, groupArn };
+  console.log(USER_GROUP_LOG, 'full request', { method: 'PUT', url, body });
+  return api.put<UserGroupRecord>(url, body);
 };
 
 export const joinUserGroup = async (groupArn: string): Promise<UserGroupRecord> => {

@@ -10,7 +10,7 @@ export default function GarageStack() {
   const { t } = useApp();
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }}>
-      <Stack.Screen name="Garage" component={PlaceholderScreen} initialParams={{ title: t.garage }} />
+      <Stack.Screen name="GarageList" component={PlaceholderScreen} initialParams={{ title: t.garage }} />
       <Stack.Screen name="VehicleForm" component={PlaceholderScreen} initialParams={{ title: 'Vehicle' }} />
     </Stack.Navigator>
   );

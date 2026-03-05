@@ -13,7 +13,7 @@ export default function AccountStack() {
   const { t } = useApp();
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }}>
-      <Stack.Screen name="Account" component={AccountScreen} />
+      <Stack.Screen name="AccountMain" component={AccountScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="ManageAccount" component={PlaceholderScreen} initialParams={{ title: t.account }} />

@@ -21,7 +21,7 @@ export type TripsStackParamList = {
 };
 
 export type FriendsStackParamList = {
-  Friends: undefined;
+  FriendsList: undefined;
   FriendInvites: undefined;
   PeopleSearch: undefined;
   PeopleSearchResults: { query: string };
@@ -33,12 +33,12 @@ export type AddStackParamList = {
 };
 
 export type GarageStackParamList = {
-  Garage: undefined;
+  GarageList: undefined;
   VehicleForm: { mode: 'add' | 'edit'; vehicleId?: string };
 };
 
 export type AccountStackParamList = {
-  Account: undefined;
+  AccountMain: undefined;
   Settings: undefined;
   Support: undefined;
   ManageAccount: undefined;

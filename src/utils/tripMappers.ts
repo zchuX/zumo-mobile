@@ -1,5 +1,6 @@
 import type { TripMetadata, UserTripListItem } from '../api/tripService';
-import type { Trip, TripStatus, Participant } from '../types';
+import type { Trip, Participant } from '../types';
+import { TripStatus } from '../types';
 
 export function mapUserTripListItemToFrontend(ut: UserTripListItem): Trip {
   const startTime = ut.startTime && ut.startTime > 0 ? new Date(ut.startTime) : null;
@@ -137,9 +138,10 @@ export function mapBackendTripToFrontend(
       imageUrl: g.imageUrl ?? undefined,
     })),
     startTime: bt.startTime,
-    isDriver:
-      bt.driver === currentUserId ||
-      (bt.driver ?? '').replace('user:', '').toLowerCase() ===
-        (currentUserId ?? '').replace('user:', '').toLowerCase(),
+    isDriver: (() => {
+      const a = (bt.driver ?? '').replace(/^user:/i, '').trim().toLowerCase();
+      const b = (currentUserId ?? '').replace(/^user:/i, '').trim().toLowerCase();
+      return a !== '' && (bt.driver === currentUserId || a === b);
+    })(),
   };
 }

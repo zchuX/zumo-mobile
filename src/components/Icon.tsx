@@ -19,6 +19,7 @@ const nameMap: Record<string, string> = {
   badge: 'badge',
   lock: 'lock',
   contact_support: 'contact-support',
+  chevron_left: 'chevron-left',
   chevron_right: 'chevron-right',
   language: 'language',
   visibility: 'visibility',
@@ -33,6 +34,8 @@ const nameMap: Record<string, string> = {
   expand_less: 'expand-less',
   check: 'check',
   pets: 'pets',
+  share: 'share',
+  share_windows: 'share',
 };
 
 export interface IconProps {

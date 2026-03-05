@@ -8,6 +8,8 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +21,58 @@ import { useUncompletedTrips, useCompletedTrips, useLeaveTrip } from '../src/hoo
 import type { Trip } from '../src/types';
 import { TripStatus } from '../src/types';
 import { colors, fontSize, spacing, borderRadius } from '../src/theme';
+
+const SWIPE_REVEAL = 80;
+const RED_FILL = 30;
+const RED_TOTAL = SWIPE_REVEAL + RED_FILL;
+const SNAP = { damping: 24, stiffness: 260 };
+
+function SwipeableCard({
+  tripId,
+  openId,
+  setOpenId,
+  onPress,
+  children,
+}: {
+  tripId: string;
+  openId: string | null;
+  setOpenId: (id: string | null) => void;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const x = useSharedValue(openId === tripId ? -SWIPE_REVEAL : 0);
+  const startX = useSharedValue(0);
+
+  useEffect(() => {
+    x.value = withSpring(openId === tripId ? -SWIPE_REVEAL : 0, SNAP);
+  }, [openId, tripId]);
+
+  const pan = Gesture.Pan()
+    .activeOffsetX(-8)
+    .failOffsetY([-12, 12])
+    .onStart(() => { startX.value = x.value; })
+    .onUpdate((e) => {
+      const v = startX.value + e.translationX;
+      x.value = v >= 0 ? 0 : v <= -SWIPE_REVEAL ? -SWIPE_REVEAL : v;
+    })
+    .onEnd((e) => {
+      const open = x.value <= -40;
+      runOnJS(setOpenId)(open ? tripId : null);
+      x.value = withSpring(open ? -SWIPE_REVEAL : 0, { ...SNAP, velocity: e.velocityX });
+    });
+
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={[styles.card, style]}>
+        <Pressable onPress={onPress} style={styles.cardInner}>
+          {children}
+        </Pressable>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
 
 type TripDashboardNav = NativeStackNavigationProp<TripsStackParamList, 'TripDashboard'>;
 
@@ -45,7 +99,7 @@ export default function TripDashboard() {
   const insets = useSafeAreaInsets();
   const { t, lang, user, dashboardShowHistory, setDashboardShowHistory, setSelectedTripId, setBriefTrip, setInvitationDetails } = useApp();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [swipedId, setSwipedId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const { data: uncompletedTripsData, isLoading: isLoadingUncompleted, isError: isErrorUncompleted, error: errorUncompleted, refetch: refetchUncompleted } = useUncompletedTrips();
   const { data: completedTripsData, isLoading: isLoadingCompleted, isError: isErrorCompleted, error: errorCompleted, refetch: refetchCompleted } = useCompletedTrips();
@@ -73,8 +127,8 @@ export default function TripDashboard() {
 
   const handleDeleteTrip = async (id: string) => {
     try {
+      setOpenId(null);
       await leaveTripMutation.mutateAsync(id);
-      setSwipedId(null);
     } catch {
       Alert.alert(lang === 'zh' ? '操作失败' : 'Operation failed');
     }
@@ -106,8 +160,8 @@ export default function TripDashboard() {
     const tripIdShort = trip.id.split(':').pop()?.substring(0, 8) ?? '';
 
     const onPress = () => {
-      if (swipedId === trip.id) {
-        setSwipedId(null);
+      if (openId === trip.id) {
+        setOpenId(null);
         return;
       }
       if (isInvitation) {
@@ -124,24 +178,24 @@ export default function TripDashboard() {
     return (
       <View key={trip.id} style={styles.cardWrap}>
         <View style={styles.actionLayer}>
-          <Pressable
-            onPress={() => handleDeleteTrip(trip.id)}
-            disabled={leaveTripMutation.isPending}
-            style={[styles.deleteBtn, leaveTripMutation.isPending && styles.deleteBtnDisabled]}
-          >
-            <Icon name={leaveTripMutation.isPending ? 'hourglass_empty' : 'delete'} size={20} color={colors.white} />
-            <Text style={styles.deleteBtnLabel}>
-              {leaveTripMutation.isPending ? (lang === 'zh' ? '正在处理' : 'Processing') : (lang === 'zh' ? '删除' : 'Delete')}
-            </Text>
-          </Pressable>
+          <View style={styles.actionSpacer} />
+          <View style={styles.actionRed}>
+            <View style={styles.actionRedFill} />
+            <View style={styles.actionRedContent}>
+              <Pressable
+                onPress={() => handleDeleteTrip(trip.id)}
+                disabled={leaveTripMutation.isPending}
+                style={[styles.deleteBtn, leaveTripMutation.isPending && styles.deleteBtnDisabled]}
+              >
+                <Icon name={leaveTripMutation.isPending ? 'hourglass_empty' : 'delete'} size={20} color={colors.white} />
+                <Text style={styles.deleteBtnLabel}>
+                  {leaveTripMutation.isPending ? (lang === 'zh' ? '正在处理' : 'Processing') : (lang === 'zh' ? '删除' : 'Delete')}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
-        <Pressable
-          onPress={onPress}
-          style={[
-            styles.card,
-            { transform: [{ translateX: swipedId === trip.id ? -80 : 0 }] },
-          ]}
-        >
+        <SwipeableCard tripId={trip.id} openId={openId} setOpenId={setOpenId} onPress={onPress}>
           <Image source={{ uri: bgImg }} style={styles.cardBg} />
           <View style={styles.cardOverlay}>
             {!effectivelyCollapsed && (
@@ -183,7 +237,7 @@ export default function TripDashboard() {
               )}
             </View>
           </View>
-        </Pressable>
+        </SwipeableCard>
       </View>
     );
   };
@@ -345,17 +399,38 @@ const styles = StyleSheet.create({
   cardList: { gap: spacing.gap4 },
   collapseBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   collapseBtnText: { fontSize: fontSize['9'], fontWeight: '700', color: colors.slate[400], textTransform: 'uppercase' },
-  cardWrap: { position: 'relative', marginBottom: spacing.gap4 },
+  cardWrap: {
+    marginBottom: spacing.gap4,
+    borderRadius: 18,
+    overflow: 'hidden',
+    position: 'relative',
+  },
   actionLayer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.p6,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'stretch',
     zIndex: 5,
+  },
+  actionSpacer: { flex: 1 },
+  actionRed: {
+    width: RED_TOTAL,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.rose[500],
+    borderTopRightRadius: 18,
+    borderBottomRightRadius: 18,
+  },
+  actionRedFill: { width: RED_FILL, backgroundColor: colors.rose[500] },
+  actionRedContent: {
+    width: SWIPE_REVEAL,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.gap1,
   },
   deleteBtn: { alignItems: 'center', gap: 4 },
   deleteBtnDisabled: { opacity: 0.5 },
@@ -372,6 +447,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.black,
     zIndex: 10,
   },
+  cardInner: { alignSelf: 'stretch' },
   cardBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', opacity: 0.7 },
   cardOverlay: { position: 'relative', zIndex: 1 },
   cardTopRow: {

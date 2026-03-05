@@ -60,7 +60,7 @@ export default function MainTabs() {
           tabBarLabel: t.startTrip,
           tabBarIcon: ({ focused }) => (
             <View style={styles.addButton}>
-              <Icon name="add" size={24} color={colors.white} />
+              <Icon name="add" size={30} color={colors.white} />
             </View>
           ),
           tabBarLabelStyle: [styles.tabLabel, styles.addLabel],
@@ -106,13 +106,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   addButton: {
-    width: 48,
-    height: 40,
-    borderRadius: 8,
+    width: 56,
+    height: 48,
+    borderRadius: 10,
     backgroundColor: colors.sage,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginTop: -14,
+    marginBottom: 18,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -120,6 +121,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   addLabel: {
+    fontSize: 10,
     fontWeight: '800',
     color: colors.sage,
     textTransform: 'uppercase',

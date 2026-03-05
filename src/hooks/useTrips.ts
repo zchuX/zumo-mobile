@@ -215,6 +215,7 @@ export function useUpdateUserGroup() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: tripKeys.detail(data.tripArn) });
       queryClient.invalidateQueries({ queryKey: tripKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['userGroup', data.groupArn] });
     },
   });
 }

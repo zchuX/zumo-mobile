@@ -8,7 +8,7 @@ const Stack = createNativeStackNavigator<FriendsStackParamList>();
 export default function FriendsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }}>
-      <Stack.Screen name="Friends" component={PlaceholderScreen} initialParams={{ title: 'Friends' }} />
+      <Stack.Screen name="FriendsList" component={PlaceholderScreen} initialParams={{ title: 'Friends' }} />
       <Stack.Screen name="FriendInvites" component={PlaceholderScreen} initialParams={{ title: 'Invites' }} />
       <Stack.Screen name="PeopleSearch" component={PlaceholderScreen} initialParams={{ title: 'Search' }} />
       <Stack.Screen name="PeopleSearchResults" component={PlaceholderScreen} initialParams={{ title: 'Results' }} />
