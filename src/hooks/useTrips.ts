@@ -8,6 +8,7 @@ import tripService, {
   type ArriveLocationParams,
   type CreateUserGroupParams,
   type UpdateUserGroupParams,
+  type UserTrip,
 } from '../api/tripService';
 import type { Trip, Participant } from '../types';
 import { TripStatus } from '../types';
@@ -23,9 +24,15 @@ export function useUncompletedTrips() {
       console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: fetching...');
       try {
         const response = await tripService.listTrips({ completed: false });
-        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: listTrips returned', { tripCount: response.trips?.length ?? 0 });
+        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: listTrips returned', {
+          tripCount: response.trips?.length ?? 0,
+          rawItems: response.trips?.map((ut) => ({ tripArn: ut.tripArn, isDriver: ut.isDriver, userGroupArn: ut.userGroupArn, userTripStatus: ut.userTripStatus })),
+        });
         const mapped = response.trips.map(mapUserTripListItemToFrontend);
-        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: mapped', { count: mapped.length });
+        console.log(TRIP_HOOK_LOG, 'useUncompletedTrips: mapped', {
+          count: mapped.length,
+          invitationTrips: mapped.filter((t) => t.userTripStatus === 'Invitation').map((t) => ({ id: t.id, userGroupArn: t.userGroupArn })),
+        });
         return mapped;
       } catch (err) {
         console.error(TRIP_HOOK_LOG, 'useUncompletedTrips: queryFn error', err);
@@ -65,12 +72,34 @@ export function useTrip(tripArn: string | null) {
     queryFn: async () => {
       if (!tripArn) return null;
       const response = await tripService.getTripDetails(tripArn);
+      const statusWithGroup = response.status as { userGroupArn?: string | null };
+      const userGroupArn = statusWithGroup.userGroupArn ?? null;
+      if (__DEV__) {
+        console.log(TRIP_HOOK_LOG, 'useTrip: getTripDetails response', {
+          tripArn,
+          status: response.status,
+          userTripStatus: response.status.userTripStatus,
+          userGroupArn,
+        });
+      }
       return mapBackendTripToFrontend(
         response.trip,
         response.status.userTripStatus ?? null,
-        (response.status as { userStatusKey?: string | null }).userStatusKey ?? null,
+        userGroupArn,
         currentUserId
       );
+    },
+    enabled: !!tripArn,
+    staleTime: 15 * 1000,
+  });
+}
+
+export function useTripUsers(tripArn: string | null) {
+  return useQuery({
+    queryKey: tripArn ? tripKeys.users(tripArn) : ['trips', 'detail', 'none', 'users'],
+    queryFn: async () => {
+      if (!tripArn) return { users: [] as UserTrip[] };
+      return tripService.listTripUsers(tripArn);
     },
     enabled: !!tripArn,
     staleTime: 15 * 1000,
@@ -168,7 +197,42 @@ export function useBecomeDriver() {
     onSuccess: (updatedTrip: TripMetadata) => {
       queryClient.setQueryData(
         tripKeys.detail(updatedTrip.tripArn),
+        mapBackendTripToFrontend(updatedTrip, 'Confirmed', null, currentUserId)
+      );
+      queryClient.invalidateQueries({ queryKey: tripKeys.lists() });
+    },
+  });
+}
+
+export function useInviteDriver() {
+  const queryClient = useQueryClient();
+  const { user } = useApp();
+  const currentUserId = user?.userArn ?? user?.id ?? null;
+
+  return useMutation({
+    mutationFn: ({ tripArn, userId }: { tripArn: string; userId?: string }) =>
+      tripService.inviteDriver(tripArn, userId != null ? { userId } : undefined),
+    onSuccess: (updatedTrip: TripMetadata) => {
+      queryClient.setQueryData(
+        tripKeys.detail(updatedTrip.tripArn),
         mapBackendTripToFrontend(updatedTrip, null, null, currentUserId)
+      );
+      queryClient.invalidateQueries({ queryKey: tripKeys.lists() });
+    },
+  });
+}
+
+export function useAcceptDriverInvitation() {
+  const queryClient = useQueryClient();
+  const { user } = useApp();
+  const currentUserId = user?.userArn ?? user?.id ?? null;
+
+  return useMutation({
+    mutationFn: (tripArn: string) => tripService.acceptDriverInvitation(tripArn),
+    onSuccess: (updatedTrip: TripMetadata) => {
+      queryClient.setQueryData(
+        tripKeys.detail(updatedTrip.tripArn),
+        mapBackendTripToFrontend(updatedTrip, 'Confirmed', null, currentUserId)
       );
       queryClient.invalidateQueries({ queryKey: tripKeys.lists() });
     },

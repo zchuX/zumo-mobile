@@ -42,7 +42,7 @@ export function mapUserTripListItemToFrontend(ut: UserTripListItem): Trip {
     createdBy: ut.isDriver ? 'me' : 'unknown',
     notes: undefined,
     userTripStatus: ut.userTripStatus,
-    userGroupArn: ut.userTripArn,
+    userGroupArn: ut.userGroupArn ?? undefined,
     locations: [],
     userGroups: [],
     startTime: ut.startTime,

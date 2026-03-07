@@ -9,27 +9,27 @@ export type AuthStackParamList = {
 export type TripsStackParamList = {
   TripDashboard: undefined;
   TripDetail: { tripId: string; title?: string };
-  TripSearch: undefined;
   TripBrief: { trip: Trip };
   TripInvitation: { trip?: Trip; type?: 'driver' | 'passenger'; inviterName?: string; groupName?: string; title?: string };
   AddPassengerGroup: undefined;
   DriverProfile: undefined;
   PassengerGroupDetail: undefined;
   PassengerGroupBrief: undefined;
-  ShareTrip: undefined;
+  ShareTrip: { tripId: string; groupArn: string };
   AddMemberSelection: undefined;
 };
 
 export type FriendsStackParamList = {
   FriendsList: undefined;
   FriendInvites: undefined;
-  PeopleSearch: undefined;
+  PeopleSearch: { initialQuery?: string };
   PeopleSearchResults: { query: string };
-  MemberProfile: { memberId: string; source: string };
+  MemberProfile: { memberId: string; source: string; avatarUrl?: string; displayName?: string };
 };
 
 export type AddStackParamList = {
   CreateTrip: undefined;
+  ConfigureDraftGroup: undefined;
 };
 
 export type GarageStackParamList = {

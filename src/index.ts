@@ -18,6 +18,8 @@ export { tripKeys } from './data/trips/keys';
 export { default as api } from './api/apiClient';
 export * from './api/authService';
 export * from './api/tripService';
+export * from './api/friendsService';
+export * from './api/userService';
 export * from './api/mockTrips';
 
 export { mapUserTripListItemToFrontend, mapBackendTripToFrontend } from './utils/tripMappers';
@@ -26,3 +28,5 @@ export { AppProvider, useApp } from './AppContext';
 export type { AppContextValue } from './AppContext';
 
 export * from './hooks/useTrips';
+export * from './hooks/useFriends';
+export * from './hooks/useUsers';

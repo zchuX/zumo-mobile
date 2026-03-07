@@ -23,6 +23,23 @@ const DEFAULT_AVATAR = 'https://picsum.photos/seed/user/200';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+function countdownText(pickupTimeMs: number, lang: string): string {
+  const now = Date.now();
+  const diff = pickupTimeMs - now;
+  if (diff < 0) return lang === 'zh' ? '计划出发时间已过' : 'Planned start time passed';
+  const days = Math.floor(diff / (24 * 3600000));
+  const hours = Math.floor((diff % (24 * 3600000)) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (days >= 30) {
+    const months = Math.floor(days / 30);
+    const remainingDays = days % 30;
+    return lang === 'zh' ? `将在 ${months} 个月 ${remainingDays} 天后出发` : `Departing in ${months}mo ${remainingDays}d`;
+  }
+  if (days >= 1) return lang === 'zh' ? `将在 ${days} 天后出发` : `Departing in ${days} days`;
+  if (hours > 0) return lang === 'zh' ? `${hours}小时后出发` : `Departing in ${hours}h ${mins}m`;
+  return lang === 'zh' ? `${mins}分钟后出发` : `Departing in ${mins}m`;
+}
+
 function getCalendarDays(year: number, month: number, selectedDate: Date) {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
@@ -72,6 +89,7 @@ export default function PassengerGroupDetailScreen() {
     selectedTripId,
     setSelectedMemberId,
     setMemberProfileSource,
+    invitationDetails,
   } = useApp();
   const { data: group, isLoading } = useUserGroup(selectedGroupArn);
   const tripArnToLoad = selectedTripId ?? group?.tripArn ?? null;
@@ -93,8 +111,9 @@ export default function PassengerGroupDetailScreen() {
             (driverParticipant.user?.id === currentUserId ||
               driverParticipant.user?.userArn === currentUserId ||
               normalizeId(driverParticipant.user?.id ?? driverParticipant.user?.userArn) === normalizeId(currentUserId))))));
-  const canEditGroup = isInGroup || isDriver;
-  const showShareButton = isInGroup || isDriver;
+  const isDriverInvitationView = invitationDetails?.type === 'driver';
+  const canEditGroup = !isDriverInvitationView && (isInGroup || isDriver);
+  const showShareButton = !isDriverInvitationView && (isInGroup || isDriver);
 
   const [isEditing, setIsEditing] = useState(false);
   const [pickup, setPickup] = useState('');
@@ -172,7 +191,7 @@ export default function PassengerGroupDetailScreen() {
       setMemberProfileSource('passenger_group_detail');
       (navigation.getParent() as any)?.navigate('Friends', {
         screen: 'MemberProfile',
-        params: { memberId: member.id, source: 'passenger_group_detail' },
+        params: { memberId: member.id, source: 'passenger_group_detail', avatarUrl: member.avatar, displayName: nicknames[member.id] || member.name },
       });
     }
   };
@@ -191,7 +210,9 @@ export default function PassengerGroupDetailScreen() {
   };
 
   const onShare = () => {
-    navigation.navigate('ShareTrip');
+    if (tripArnToLoad && selectedGroupArn) {
+      navigation.navigate('ShareTrip', { tripId: tripArnToLoad, groupArn: selectedGroupArn });
+    }
   };
 
   const onAddMember = () => {
@@ -199,46 +220,148 @@ export default function PassengerGroupDetailScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
-      <View style={[styles.header, { top: insets.top + 8 }]}>
-        <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-          <Icon name="arrow_back_ios_new" size={24} color={colors.slate[800]} />
-        </Pressable>
+    <View style={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.p4 }]}>
+        <View style={styles.headerLeft}>
+          {isEditing ? (
+            <Pressable
+              onPress={() => {
+                setIsEditing(false);
+                if (group) {
+                  setPickup(group.start);
+                  setDropoff(group.destination);
+                  const d = new Date(group.pickupTime);
+                  setPickupDateObj(d);
+                  setPickupDate(d.toISOString().split('T')[0]);
+                  setPickupTime(d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'));
+                  setGroupName(group.groupName);
+                }
+              }}
+              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
+            >
+              <Icon name="close" size={20} color={colors.white} />
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+              <Icon name="arrow_back_ios_new" size={20} color={colors.white} />
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1} pointerEvents="none">
+            {lang === 'zh' ? '乘客小组' : 'Passenger Group'}
+          </Text>
+        </View>
         <View style={styles.headerRight}>
           {showShareButton && (
-            <Pressable onPress={onShare} style={({ pressed }) => [styles.headerIconBtn, pressed && styles.pressed]}>
-              <Icon name="share" size={22} color={colors.slate[600]} />
+            <Pressable onPress={onShare} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+              <Icon name="share" size={20} color={colors.white} />
             </Pressable>
           )}
           {canEditGroup && (
             <Pressable
               onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
               disabled={isEditing && updateGroupMutation.isPending}
-              style={[styles.editBtn, isEditing && styles.editBtnActive]}
+              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
             >
-              <Icon name={isEditing ? 'check_circle' : 'edit_square'} size={22} color={isEditing ? colors.sage : colors.slate[400]} />
+              <Icon name={isEditing ? 'check_circle' : 'edit_square'} size={20} color={colors.white} />
             </Pressable>
           )}
+          {!showShareButton && !canEditGroup && <View style={styles.headerSpacer} />}
         </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          {isEditing ? (
-            <TextInput
-              value={groupName}
-              onChangeText={setGroupName}
-              style={styles.groupNameInput}
-              placeholder={lang === 'zh' ? '小组名称' : 'Group name'}
-            />
-          ) : (
-            <Text style={styles.groupName} numberOfLines={1}>{groupName}</Text>
+        <View style={styles.scrollContentInner}>
+        {/* Trip ID + date + countdown - same layout as Trip Detail */}
+        {trip?.id && (
+          <View style={styles.tripIdWrap}>
+            <View style={styles.tripIdBadge}>
+              <Text style={styles.tripIdBadgeText} numberOfLines={1}>
+                {lang === 'zh' ? `行程ID  ${trip.id}` : `TRIP ID  ${trip.id}`}
+              </Text>
+            </View>
+          </View>
+        )}
+        <Text style={styles.dateTitle}>
+          {isEditing
+            ? (pickupDate
+                ? new Date(pickupDateObj).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                : (lang === 'zh' ? '选择日期' : 'Select date')) +
+              ' ' +
+              (() => {
+                const [h, m] = (pickupTime || '00:00').split(':').map(Number);
+                const d = new Date(2000, 0, 1, isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0);
+                return d.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+              })()
+            : new Date(group.pickupTime).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) +
+              ' ' +
+              new Date(group.pickupTime).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+        </Text>
+        {countdownText(group.pickupTime, lang) ? <Text style={styles.countdownText}>{countdownText(group.pickupTime, lang)}</Text> : null}
+
+        {/* ROUTE - same style as Trip Detail: 2 locations with (pick up point) / (drop off point) */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>{lang === 'zh' ? '路线' : 'ROUTE'}</Text>
+          </View>
+          <View style={styles.timeline}>
+            <View style={styles.timelineRow}>
+              <Icon name="location_on" size={24} color={colors.sage} />
+              <View style={styles.timelineContent}>
+                {isEditing ? (
+                  <TextInput value={pickup} onChangeText={setPickup} style={styles.timelineInput} placeholder={lang === 'zh' ? '接送点' : 'Pick up point'} />
+                ) : (
+                  <Text style={styles.timelineNameFirst}>{pickup}</Text>
+                )}
+                <Text style={styles.timelineAnnotation}>{lang === 'zh' ? '(接送点)' : '(pick up point)'}</Text>
+              </View>
+            </View>
+            <View style={styles.timelineRow}>
+              <Icon name="location_on" size={24} color={colors.slate[300]} />
+              <View style={styles.timelineContent}>
+                {isEditing ? (
+                  <TextInput value={dropoff} onChangeText={setDropoff} style={styles.timelineInput} placeholder={lang === 'zh' ? '送达点' : 'Drop off point'} />
+                ) : (
+                  <Text style={styles.timelineName}>{dropoff}</Text>
+                )}
+                <Text style={styles.timelineAnnotation}>{lang === 'zh' ? '(送达点)' : '(drop off point)'}</Text>
+              </View>
+            </View>
+          </View>
+          {isEditing && (
+            <Pressable style={styles.dateTimeEditRow} onPress={() => { setCalendarViewMonth(new Date(pickupDateObj)); setShowDateTimeModal(true); }}>
+              <Text style={styles.dateTimeEditLabel}>{lang === 'zh' ? '出发时间' : 'Pick up time'}</Text>
+              <Text style={styles.dateTimeEditValue}>
+                {pickupDate
+                  ? pickupDateObj.toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                  : (lang === 'zh' ? '选择日期' : 'Select date')}{' · '}
+                {(() => {
+                  const [h, m] = (pickupTime || '00:00').split(':').map(Number);
+                  const d = new Date(2000, 0, 1, isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0);
+                  return d.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                })()}
+              </Text>
+              <Icon name="chevron_right" size={20} color={colors.slate[400]} />
+            </Pressable>
           )}
         </View>
 
         <View style={styles.section}>
+          <View style={styles.groupNameLabelWrap}>
+            {isEditing ? (
+              <TextInput
+                value={groupName}
+                onChangeText={setGroupName}
+                style={styles.groupNameLabelInput}
+                placeholder={lang === 'zh' ? '小组名称' : 'Group name'}
+              />
+            ) : (
+              <Text style={styles.groupNameLabel} numberOfLines={1}>{groupName}</Text>
+            )}
+          </View>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
+            <Text style={styles.sectionLabel}>
               {lang === 'zh' ? `成员名单 (${groupMembers.length})` : `MEMBERS (${groupMembers.length})`}
             </Text>
             {isEditing && (
@@ -248,6 +371,7 @@ export default function PassengerGroupDetailScreen() {
               </Pressable>
             )}
           </View>
+          <View style={styles.memberListBg}>
           {groupMembers.map((m) => {
             const isFriend = friendIds.has(m.id);
             const nickname = nicknames[m.id];
@@ -297,53 +421,8 @@ export default function PassengerGroupDetailScreen() {
               </Pressable>
             );
           })}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{lang === 'zh' ? '行程设置' : 'LOGISTICS'}</Text>
-          <View style={styles.logisticsCard}>
-            <Text style={styles.label}>{lang === 'zh' ? '接送点' : 'PICKUP'}</Text>
-            {isEditing ? (
-              <TextInput value={pickup} onChangeText={setPickup} style={styles.input} />
-            ) : (
-              <Text style={styles.value}>{pickup}</Text>
-            )}
-            <Text style={styles.label}>{lang === 'zh' ? '送达点' : 'DROP-OFF'}</Text>
-            {isEditing ? (
-              <TextInput value={dropoff} onChangeText={setDropoff} style={styles.input} />
-            ) : (
-              <Text style={styles.value}>{dropoff}</Text>
-            )}
-            <Text style={styles.label}>{lang === 'zh' ? '出发时间' : 'PICKUP TIME'}</Text>
-            {isEditing ? (
-              <Pressable style={styles.input} onPress={() => { setCalendarViewMonth(new Date(pickupDateObj)); setShowDateTimeModal(true); }}>
-                <Text style={styles.inputText}>
-                  {pickupDate
-                    ? pickupDateObj.toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })
-                    : (lang === 'zh' ? '选择日期' : 'Select date')}
-                  {' · '}
-                  {(() => {
-                    const [h, m] = (pickupTime || '00:00').split(':').map(Number);
-                    const d = new Date(2000, 0, 1, isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0);
-                    return d.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                  })()}
-                </Text>
-              </Pressable>
-            ) : (
-              <Text style={styles.value}>
-                {new Date(group.pickupTime).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}{' '}
-                {new Date(group.pickupTime).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-              </Text>
-            )}
           </View>
+        </View>
         </View>
       </ScrollView>
 
@@ -461,80 +540,124 @@ export default function PassengerGroupDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.slate[50] },
+  container: { flex: 1, backgroundColor: colors.white },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.white },
   loadingText: { marginTop: 12, fontSize: fontSize.sm, fontWeight: '600', color: colors.slate[500] },
   header: {
-    position: 'absolute',
-    left: spacing.p6,
-    right: spacing.p4,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 10,
+    paddingHorizontal: spacing.p6,
+    paddingBottom: spacing.py3,
+    backgroundColor: colors.sage,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1,
-    borderColor: colors.slate[100],
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerLeft: { width: 88, flexDirection: 'row', alignItems: 'center', zIndex: 1 },
+  headerCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', marginHorizontal: spacing.gap2 },
+  headerRight: { width: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, zIndex: 1 },
+  headerTitle: {
+    fontSize: fontSize.base,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textTransform: 'uppercase',
+    color: colors.white,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.slate[100],
-  },
-  editBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+  headerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.slate[100],
   },
-  editBtnActive: { borderColor: colors.sage + '33' },
+  headerSpacer: { width: 32, height: 32 },
   pressed: { opacity: 0.9 },
   scroll: { flex: 1 },
-  scrollContent: { paddingTop: 72, paddingHorizontal: spacing.p6, paddingBottom: 24 },
-  card: {
-    backgroundColor: colors.white,
-    paddingVertical: spacing.p8,
-    paddingHorizontal: spacing.p6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.slate[100],
-    marginBottom: spacing.p6,
+  scrollContent: { paddingHorizontal: spacing.p6, paddingBottom: 24 },
+  scrollContentInner: {},
+  groupNameLabelWrap: { marginBottom: spacing.p5 },
+  groupNameLabel: {
+    fontSize: fontSize.xl,
+    fontWeight: '800',
+    color: colors.sage,
   },
-  groupName: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.slate[900] },
-  groupNameInput: {
+  groupNameLabelInput: {
+    fontSize: fontSize.xl,
+    fontWeight: '800',
+    color: colors.sage,
+    backgroundColor: colors.slate[50],
+    borderRadius: 8,
+    paddingHorizontal: spacing.p3,
+    paddingVertical: 6,
+    minHeight: 44,
+  },
+  section: { marginBottom: spacing.p8 },
+  tripIdWrap: { alignItems: 'center', marginTop: spacing.p4, marginBottom: spacing.gap3 },
+  tripIdBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: spacing.p4,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.sage + '15',
+    borderWidth: 1,
+    borderColor: colors.sage + '25',
+    marginBottom: spacing.p6,
+    maxWidth: '100%',
+  },
+  tripIdBadgeText: { fontSize: fontSize.xs, fontWeight: '800', color: colors.sage, letterSpacing: 2 },
+  dateTitle: {
     fontSize: fontSize['2xl'],
     fontWeight: '800',
     color: colors.slate[900],
-    backgroundColor: colors.slate[50],
-    borderRadius: borderRadius.ios,
-    paddingHorizontal: spacing.p4,
-    paddingVertical: spacing.p4,
-    minHeight: 48,
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  section: { marginBottom: spacing.p8 },
+  countdownText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.sage, textAlign: 'center', marginBottom: spacing.p6 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.gap3 },
+  timeline: { marginLeft: 4 },
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.p6 },
+  timelineContent: { flex: 1, marginLeft: spacing.gap3 },
+  timelineName: { fontSize: fontSize.base, fontWeight: '800', color: colors.slate[500] },
+  timelineNameFirst: { fontSize: fontSize.xl, fontWeight: '800', color: colors.slate[900] },
+  timelineAnnotation: { fontSize: fontSize['11'], fontWeight: '700', color: colors.slate[400], marginTop: 2 },
+  timelineInput: {
+    fontSize: fontSize.base,
+    fontWeight: '800',
+    color: colors.slate[800],
+    backgroundColor: colors.slate[50],
+    borderRadius: 8,
+    paddingHorizontal: spacing.p3,
+    paddingVertical: 6,
+    minHeight: 36,
+  },
+  dateTimeEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.p4,
+    paddingVertical: spacing.p4,
+    paddingHorizontal: spacing.p4,
+    minHeight: 52,
+    backgroundColor: colors.slate[50],
+    borderRadius: 12,
+  },
+  dateTimeEditLabel: { fontSize: fontSize['11'], fontWeight: '800', color: colors.slate[400], textTransform: 'uppercase', marginRight: spacing.gap3 },
+  dateTimeEditValue: { flex: 1, fontSize: fontSize.base, fontWeight: '700', color: colors.slate[800] },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.p4 },
-  sectionTitle: {
-    fontSize: fontSize['11'],
+  sectionLabel: {
+    fontSize: fontSize.xs,
     fontWeight: '800',
     color: colors.slate[400],
     textTransform: 'uppercase',
     letterSpacing: 2,
+  },
+  memberListBg: {
+    backgroundColor: colors.slate[50],
+    borderRadius: 16,
+    padding: spacing.p4,
   },
   addMemberBtn: {
     flexDirection: 'row',
@@ -547,19 +670,18 @@ const styles = StyleSheet.create({
     minHeight: 40,
     borderRadius: borderRadius.full,
   },
-  addMemberText: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage, textTransform: 'uppercase' },
+  addMemberText: { fontSize: fontSize['11'], fontWeight: '800', color: colors.sage, textTransform: 'uppercase' },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: spacing.p4,
     backgroundColor: colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.slate[100],
+    borderRadius: 12,
     marginBottom: 8,
+    borderWidth: 0,
   },
-  memberRowEditing: { borderColor: colors.sage + '33' },
+  memberRowEditing: { borderWidth: 1, borderColor: colors.sage + '33' },
   removeMemberBtn: {
     width: 32,
     height: 32,
@@ -580,19 +702,28 @@ const styles = StyleSheet.create({
   },
   memberInfo: { marginLeft: spacing.p4, flex: 1 },
   memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  memberName: { fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800] },
+  memberName: { fontSize: fontSize.base, fontWeight: '700', color: colors.slate[800] },
   friendBadge: { backgroundColor: colors.sageLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  friendBadgeText: { fontSize: 8, fontWeight: '800', color: colors.sage },
-  memberStatus: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
+  friendBadgeText: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage },
+  memberStatus: { fontSize: fontSize['10'], fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
   statusAccepted: { color: colors.sage },
   statusPending: { color: colors.amber[500] },
-  logisticsCard: {
-    backgroundColor: colors.white,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: colors.slate[100],
-    padding: spacing.p6,
+  logisticsLabel: {
+    fontSize: fontSize['10'],
+    fontWeight: '800',
+    color: colors.slate[400],
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
+    marginTop: spacing.p4,
   },
+  logisticsValue: {
+    fontSize: fontSize.base,
+    fontWeight: '700',
+    color: colors.slate[800],
+    marginBottom: 2,
+  },
+  logisticsLabelFirst: { marginTop: 0 },
   label: {
     fontSize: fontSize['10'],
     fontWeight: '800',

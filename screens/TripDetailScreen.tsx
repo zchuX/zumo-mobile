@@ -21,7 +21,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from '../src/components/Icon';
 import Loading from '../src/components/Loading';
 import { useApp } from '../context/AppState';
-import { useTrip, useStartTrip, useUpdateTripMetadata } from '../src/hooks/useTrips';
+import { useTrip, useStartTrip, useUpdateTripMetadata, useBecomeDriver, useAcceptDriverInvitation } from '../src/hooks/useTrips';
 import { useQueryClient } from '@tanstack/react-query';
 import { tripKeys } from '../src/data/trips/keys';
 import type { Trip } from '../src/types';
@@ -159,7 +159,7 @@ function formatLocationTime(timestamp: number | undefined | null, tripDate: stri
 
 function countdownText(trip: Trip, lang: string): string {
   if (trip.status === TripStatus.COMPLETED) return lang === 'zh' ? '已完成' : 'Completed';
-  if (trip.status === TripStatus.IN_PROGRESS) return lang === 'zh' ? '进行中' : 'In Progress';
+  if (trip.status === TripStatus.IN_PROGRESS) return '';
   const now = Date.now();
   const diff = trip.startTime - now;
   if (diff < 0) return lang === 'zh' ? '计划出发时间已过' : 'Planned start time passed';
@@ -219,10 +219,12 @@ export default function TripDetailScreen() {
   const route = useRoute<TripDetailRoute>();
   const insets = useSafeAreaInsets();
   const tripId = route.params?.tripId ?? null;
-  const { t, lang, user, vehicles, friendIds, setSelectedMemberId, setMemberProfileSource, setSelectedGroupArn, setSelectedTripId } = useApp();
+  const { t, lang, user, vehicles, friendIds, setSelectedMemberId, setMemberProfileSource, setSelectedGroupArn, setSelectedTripId, setInvitationDetails } = useApp();
   const { data: trip, isLoading, error } = useTrip(tripId);
   const startTripMutation = useStartTrip();
   const updateMetadataMutation = useUpdateTripMetadata();
+  const becomeDriverMutation = useBecomeDriver();
+  const acceptDriverInvitationMutation = useAcceptDriverInvitation();
   const queryClient = useQueryClient();
 
   const [showModifyModal, setShowModifyModal] = useState(false);
@@ -301,8 +303,9 @@ export default function TripDetailScreen() {
     );
   }
 
-  // Invitation: show prompt to view invitation screen
-  if (trip.userTripStatus === 'Invitation') {
+  // Invitation as passenger: show prompt to view invitation screen
+  const isInvitationPassenger = trip.userTripStatus === 'Invitation' && !trip.isDriver;
+  if (isInvitationPassenger) {
     return (
       <View style={[styles.centerWrap, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.inviteIconWrap}>
@@ -332,19 +335,26 @@ export default function TripDetailScreen() {
     const handleMemberClick = (id: string) => {
       setSelectedMemberId(id);
       setMemberProfileSource('trip_detail');
-      navigation.navigate('MemberProfile', { memberId: id, source: 'trip_detail' });
+      const participant = [driver, ...passengers].find((p) => (p.user.id ?? p.user.userArn) === id);
+      (navigation.getParent() as any)?.navigate('Friends', {
+        screen: 'MemberProfile',
+        params: {
+          memberId: id,
+          source: 'trip_detail',
+          avatarUrl: participant?.user?.avatar,
+          displayName: participant?.user?.name,
+        },
+      });
     };
 
     return (
       <View style={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-            <Icon name="arrow_back_ios_new" size={24} color={colors.slate[600]} />
+        <View style={[styles.header, { paddingTop: insets.top + spacing.p4 }]}>
+          <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+            <Icon name="arrow_back_ios_new" size={20} color={colors.white} />
           </Pressable>
-          <View style={styles.idBadgeCompleted}>
-            <Text style={styles.idBadgeText}>ID: {trip.id.split(':').pop()?.slice(0, 8) ?? trip.id}</Text>
-          </View>
-          <View style={styles.backBtn} />
+          <Text style={styles.headerTitle}>{lang === 'zh' ? '行程详情' : 'Trip Details'}</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.completedBadge}>
@@ -358,6 +368,11 @@ export default function TripDetailScreen() {
           <Text style={styles.completedDate}>
             {lang === 'zh' ? `完成于 ${trip.date}` : `Completed on ${trip.date}`}
           </Text>
+          <View style={styles.tripIdBadge}>
+            <Text style={styles.tripIdBadgeText} numberOfLines={1}>
+              {lang === 'zh' ? `行程ID  ${trip.id}` : `TRIP ID  ${trip.id}`}
+            </Text>
+          </View>
 
           {trip.locations.length > 0 && (
             <View style={styles.section}>
@@ -450,18 +465,25 @@ export default function TripDetailScreen() {
   const cleanMe = (user?.userArn ?? '').replace(/^user:/i, '').trim().toLowerCase();
   const cleanDriverArn = (driver?.user?.userArn ?? trip.createdBy ?? '').replace(/^user:/i, '').trim().toLowerCase();
   const isMeDriver = Boolean(cleanMe && cleanDriverArn && cleanMe === cleanDriverArn);
-  const canStartTrip = isMeDriver && trip.status === TripStatus.CONFIRMED;
-  const canModifyTrip =
-    isMeDriver &&
-    trip.status !== TripStatus.IN_PROGRESS &&
-    trip.status !== TripStatus.COMPLETED;
+  const isInvitationDriver = trip.userTripStatus === 'Invitation' && isMeDriver;
+  const canStartTrip = !isInvitationDriver && isMeDriver && trip.status !== TripStatus.IN_PROGRESS;
+  const canModifyTrip = !isInvitationDriver && isMeDriver && trip.status !== TripStatus.IN_PROGRESS;
   const isDriverFriend = driver ? friendIds.has(driver.user.id ?? driver.user.userArn) : false;
 
   const handleDriverPress = () => {
     if (driver) {
-      setSelectedMemberId(driver.user.id ?? driver.user.userArn);
+      const id = driver.user.id ?? driver.user.userArn;
+      setSelectedMemberId(id);
       setMemberProfileSource('trip_detail');
-      navigation.navigate('MemberProfile', { memberId: driver.user.id ?? driver.user.userArn, source: 'trip_detail' });
+      (navigation.getParent() as any)?.navigate('Friends', {
+        screen: 'MemberProfile',
+        params: {
+          memberId: id,
+          source: 'trip_detail',
+          avatarUrl: driver.user.avatar,
+          displayName: driver.user.name,
+        },
+      });
     }
   };
 
@@ -484,18 +506,22 @@ export default function TripDetailScreen() {
     }
   };
 
+  const handleAcceptInvitation = async () => {
+    if (!tripId) return;
+    try {
+      await acceptDriverInvitationMutation.mutateAsync(tripId);
+      setInvitationDetails(null);
+      // Trip cache updated by mutation; isInvitationDriver becomes false, full driver UI shown
+    } catch {
+      // error already surfaced by mutation
+    }
+  };
+
   const statusLabel =
     trip.status === TripStatus.IN_PROGRESS
-      ? lang === 'zh'
-        ? '进行中'
-        : 'In Progress'
-      : trip.status === TripStatus.CONFIRMED
-        ? lang === 'zh'
-          ? '已确认'
-          : 'Confirmed'
-        : lang === 'zh'
-          ? '匹配中'
-          : 'Matching';
+      ? (lang === 'zh' ? '进行中' : 'In Progress')
+      : (lang === 'zh' ? '即将开始' : 'Upcoming');
+  const countdown = countdownText(trip, lang);
 
   const openModifyModal = () => {
     const d = trip.startTime > 0 ? new Date(trip.startTime) : new Date();
@@ -595,16 +621,14 @@ export default function TripDetailScreen() {
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-          <Icon name="arrow_back_ios_new" size={24} color={colors.slate[600]} />
+      <View style={[styles.header, { paddingTop: insets.top + spacing.p4 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+          <Icon name="arrow_back_ios_new" size={20} color={colors.white} />
         </Pressable>
-        <View style={styles.idBadge}>
-          <Text style={styles.idBadgeText}>ID: {trip.id.split(':').pop()?.slice(0, 8) ?? trip.id}</Text>
-        </View>
+        <Text style={styles.headerTitle}>{lang === 'zh' ? '行程详情' : 'Trip Details'}</Text>
         {canModifyTrip ? (
-          <Pressable onPress={openModifyModal} style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-            <Icon name="edit" size={24} color={colors.slate[600]} />
+          <Pressable onPress={openModifyModal} style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}>
+            <Icon name="edit" size={20} color={colors.white} />
           </Pressable>
         ) : (
           <View style={styles.headerSpacer} />
@@ -612,6 +636,18 @@ export default function TripDetailScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.tripIdWrap}>
+          <View style={styles.tripIdBadge}>
+            <Text style={styles.tripIdBadgeText} numberOfLines={1}>
+              {lang === 'zh' ? `行程ID  ${trip.id}` : `TRIP ID  ${trip.id}`}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.dateTitle}>
+          {trip.date === 'TBD' ? 'TBD' : new Date(trip.date).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}{' '}
+          {trip.timeRange.split(' - ')[0]}
+        </Text>
+        {countdown ? <Text style={styles.countdownText}>{countdown}</Text> : null}
         <View style={styles.statusWrap}>
           <View style={[styles.statusBadge, trip.status === TripStatus.IN_PROGRESS && styles.statusBadgeActive]}>
             {trip.status === TripStatus.IN_PROGRESS && <View style={styles.statusDot} />}
@@ -620,11 +656,6 @@ export default function TripDetailScreen() {
             </Text>
           </View>
         </View>
-        <Text style={styles.dateTitle}>
-          {trip.date === 'TBD' ? 'TBD' : new Date(trip.date).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}{' '}
-          {trip.timeRange.split(' - ')[0]}
-        </Text>
-        <Text style={styles.countdownText}>{countdownText(trip, lang)}</Text>
 
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
@@ -740,18 +771,31 @@ export default function TripDetailScreen() {
           </View>
         </View>
 
-        {canStartTrip && (
+        {(canStartTrip || isInvitationDriver) && (
           <View style={styles.section}>
-            <Pressable
-              onPress={handleStartTrip}
-              disabled={startTripMutation.isPending}
-              style={({ pressed }) => [styles.startTripRow, pressed && styles.pressed]}
-            >
-              <Icon name="play_arrow" size={20} color={colors.sage} />
-              <Text style={styles.startTripRowText}>
-                {startTripMutation.isPending ? (lang === 'zh' ? '启动中...' : 'Starting...') : (lang === 'zh' ? '开始行程' : 'Start trip')}
-              </Text>
-            </Pressable>
+            {isInvitationDriver ? (
+              <Pressable
+                onPress={handleAcceptInvitation}
+                disabled={acceptDriverInvitationMutation.isPending}
+                style={({ pressed }) => [styles.startTripRow, pressed && styles.pressed]}
+              >
+                <Icon name="check" size={20} color={colors.sage} />
+                <Text style={styles.startTripRowText}>
+                  {acceptDriverInvitationMutation.isPending ? (lang === 'zh' ? '接受中...' : 'Accepting...') : t.acceptInvitation}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleStartTrip}
+                disabled={startTripMutation.isPending}
+                style={({ pressed }) => [styles.startTripRow, pressed && styles.pressed]}
+              >
+                <Icon name="play_arrow" size={20} color={colors.sage} />
+                <Text style={styles.startTripRowText}>
+                  {startTripMutation.isPending ? (lang === 'zh' ? '启动中...' : 'Starting...') : (lang === 'zh' ? '开始行程' : 'Start trip')}
+                </Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -789,12 +833,16 @@ export default function TripDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>{lang === 'zh' ? '乘客小组' : 'PASSENGER GROUPS'}</Text>
+          <View style={styles.passengerGroupsLabelWrap}>
+            <Text style={styles.sectionLabel}>{lang === 'zh' ? '乘客小组' : 'PASSENGER GROUPS'}</Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupsScroll}>
-            <Pressable onPress={handleAddGroup} style={styles.addGroupBtn}>
-              <Icon name="add" size={32} color={colors.sage} />
-              <Text style={styles.addGroupLabel}>{lang === 'zh' ? '邀请乘客' : 'Invite Passenger'}</Text>
-            </Pressable>
+            {!isInvitationDriver && (
+              <Pressable onPress={handleAddGroup} style={styles.addGroupBtn}>
+                <Icon name="add" size={32} color={colors.sage} />
+                <Text style={styles.addGroupLabel}>{lang === 'zh' ? '邀请乘客' : 'Invite Passenger'}</Text>
+              </Pressable>
+            )}
             {trip.userGroups.map((g) => (
               <Pressable key={g.groupId} onPress={() => handleGroupPress(g.groupId)} style={styles.groupChip}>
                 <View style={styles.groupAvatar}>
@@ -1039,32 +1087,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.p6,
     paddingBottom: spacing.py3,
+    backgroundColor: colors.sage,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.slate[100],
+  headerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerSpacer: { width: 40, height: 40 },
+  headerSpacer: { width: 32, height: 32 },
+  headerTitle: { fontSize: fontSize.base, fontWeight: '800', letterSpacing: -0.5, textTransform: 'uppercase', color: colors.white },
   pressed: { opacity: 0.9 },
-  idBadge: {
-    paddingHorizontal: spacing.p4,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.sage + '1A',
-  },
-  idBadgeText: { fontSize: fontSize['11'], fontWeight: '800', color: colors.sage, letterSpacing: 2 },
-  idBadgeCompleted: {
-    paddingHorizontal: spacing.p4,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.slate[100],
-  },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.p6, paddingBottom: spacing.p8 },
+  tripIdWrap: { alignItems: 'center', marginTop: spacing.p4, marginBottom: spacing.gap3 },
   statusWrap: { alignItems: 'center', marginBottom: spacing.gap3 },
   statusBadge: {
     flexDirection: 'row',
@@ -1082,7 +1125,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sage,
     marginRight: 6,
   },
-  statusBadgeText: { fontSize: fontSize['11'], fontWeight: '700', color: colors.slate[400] },
+  statusBadgeText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.slate[400] },
   statusBadgeTextActive: { color: colors.sage },
   dateTitle: {
     fontSize: fontSize['2xl'],
@@ -1092,9 +1135,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   countdownText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.sage, textAlign: 'center', marginBottom: spacing.p6 },
+  tripIdBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: spacing.p4,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.sage + '15',
+    borderWidth: 1,
+    borderColor: colors.sage + '25',
+    marginBottom: spacing.p6,
+    maxWidth: '100%',
+  },
+  tripIdBadgeText: { fontSize: fontSize.xs, fontWeight: '800', color: colors.sage, letterSpacing: 2 },
   section: { marginBottom: spacing.p6 },
   sectionLabel: {
-    fontSize: fontSize['11'],
+    fontSize: fontSize.xs,
     fontWeight: '800',
     color: colors.slate[400],
     textTransform: 'uppercase',
@@ -1106,10 +1161,10 @@ const styles = StyleSheet.create({
   timelineRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.p6 },
   sortableRow: { flexDirection: 'row', alignItems: 'center', height: ROW_H, paddingHorizontal: spacing.gap2 },
   timelineContent: { flex: 1, marginLeft: spacing.gap3 },
-  timelineTime: { fontSize: 9, fontWeight: '700', color: colors.slate[400], marginBottom: 2 },
-  timelineName: { fontSize: fontSize.sm, fontWeight: '800', color: colors.slate[500] },
+  timelineTime: { fontSize: fontSize['10'], fontWeight: '700', color: colors.slate[400], marginBottom: 2 },
+  timelineName: { fontSize: fontSize.base, fontWeight: '800', color: colors.slate[500] },
   timelineNameFirst: { fontSize: fontSize.xl, fontWeight: '800', color: colors.slate[900] },
-  timelineGroups: { fontSize: fontSize['10'], fontWeight: '700', color: colors.slate[400], marginTop: 2 },
+  timelineGroups: { fontSize: fontSize['11'], fontWeight: '700', color: colors.slate[400], marginTop: 2 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.gap3 },
   editRouteActions: { flexDirection: 'row', gap: spacing.gap3 },
   editRouteCancel: { fontSize: fontSize['10'], fontWeight: '800', color: colors.slate[400], textTransform: 'uppercase' },
@@ -1322,16 +1377,17 @@ const styles = StyleSheet.create({
   driverInfo: { flex: 1 },
   driverRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   driverName: { fontSize: fontSize.lg, fontWeight: '800', color: colors.slate[800] },
-  driverRole: { fontSize: fontSize['10'], fontWeight: '800', color: colors.slate[400], textTransform: 'uppercase', marginTop: 2 },
-  vehicleInfo: { fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800], marginTop: 4 },
-  vehicleText: { fontSize: fontSize.xs, fontWeight: '800', color: colors.slate[400], marginTop: 2 },
+  driverRole: { fontSize: fontSize['11'], fontWeight: '800', color: colors.slate[400], textTransform: 'uppercase', marginTop: 2 },
+  vehicleInfo: { fontSize: fontSize.base, fontWeight: '700', color: colors.slate[800], marginTop: 4 },
+  vehicleText: { fontSize: fontSize.sm, fontWeight: '800', color: colors.slate[400], marginTop: 2 },
   friendBadge: { backgroundColor: colors.sage + '1A', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  friendBadgeText: { fontSize: 9, fontWeight: '800', color: colors.sage },
-  friendTag: { fontSize: 8, fontWeight: '800', color: colors.sage },
-  friendTagSmall: { fontSize: 8, fontWeight: '800', color: colors.sage, marginTop: 2 },
+  friendBadgeText: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage },
+  friendTag: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage },
+  friendTagSmall: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage, marginTop: 2 },
   acceptedBadge: { backgroundColor: colors.sage, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  acceptedBadgeText: { fontSize: fontSize['10'], fontWeight: '800', color: colors.white },
-  placeholderText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[400] },
+  acceptedBadgeText: { fontSize: fontSize.xs, fontWeight: '800', color: colors.white },
+  placeholderText: { fontSize: fontSize.base, fontWeight: '700', color: colors.slate[400] },
+  passengerGroupsLabelWrap: { marginBottom: spacing.gap4 },
   groupsScroll: { flexDirection: 'row', gap: spacing.gap4, paddingVertical: 4 },
   addGroupBtn: {
     width: 64,
@@ -1339,12 +1395,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.gap3,
   },
-  addGroupLabel: { fontSize: fontSize['10'], fontWeight: '800', color: colors.slate[500], marginTop: 4, textAlign: 'center' },
+  addGroupLabel: { fontSize: fontSize['11'], fontWeight: '800', color: colors.slate[500], marginTop: 4, textAlign: 'center' },
   groupChip: { width: 64, alignItems: 'center' },
   groupAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.slate[100], alignItems: 'center', justifyContent: 'center', marginBottom: 4, overflow: 'hidden' },
   groupAvatarImg: { width: 64, height: 64, borderRadius: 32, marginBottom: 4 },
-  groupName: { fontSize: fontSize.xs, fontWeight: '700', color: colors.slate[800], textAlign: 'center' },
-  groupConfirmed: { fontSize: 9, fontWeight: '800', color: colors.sage, marginTop: 2 },
+  groupName: { fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800], textAlign: 'center' },
+  groupConfirmed: { fontSize: fontSize['10'], fontWeight: '800', color: colors.sage, marginTop: 2 },
   groupPending: { color: colors.slate[400] },
   passengerRow: {
     flexDirection: 'row',
@@ -1357,8 +1413,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.gap2,
   },
   passengerInfo: { flex: 1 },
-  passengerName: { fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800] },
-  noPassengers: { fontSize: fontSize.xs, color: colors.slate[400], textAlign: 'center', paddingVertical: spacing.p6 },
+  passengerName: { fontSize: fontSize.base, fontWeight: '700', color: colors.slate[800] },
+  noPassengers: { fontSize: fontSize.sm, color: colors.slate[400], textAlign: 'center', paddingVertical: spacing.p6 },
   completedBadge: {
     alignSelf: 'center',
     paddingHorizontal: spacing.p4,

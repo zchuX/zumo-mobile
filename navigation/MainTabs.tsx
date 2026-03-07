@@ -48,6 +48,12 @@ export default function MainTabs() {
       <Tab.Screen
         name="Friends"
         component={FriendsStack}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('Friends', { screen: 'FriendsList' });
+          },
+        })}
         options={{
           tabBarLabel: t.friends,
           tabBarIcon: ({ focused }) => <TabBarIcon name="group" focused={focused} />,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,20 +11,33 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from '../src/components/Icon';
 import { useApp } from '../context/AppState';
 import { useCreateTrip } from '../src/hooks/useTrips';
+import { useFriends } from '../src/hooks/useFriends';
 import type { Vehicle } from '../src/types';
+import type { AddStackParamList } from '../navigation/types';
 import { colors, fontSize, spacing, borderRadius } from '../src/theme';
 
+const DEFAULT_AVATAR = 'https://picsum.photos/seed/user/200';
+const MAX_AVATARS = 3;
+const AVATAR_SIZE = 36;
+const AVATAR_OVERLAP = -10;
+
+type CreateTripNav = NativeStackNavigationProp<AddStackParamList, 'CreateTrip'>;
+
 export default function CreateTripScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<CreateTripNav>();
   const insets = useSafeAreaInsets();
-  const { t, lang, user, vehicles, setSelectedTripId } = useApp();
+  const { t, lang, user, vehicles, setSelectedTripId, draftPassengerGroup, setDraftPassengerGroup } = useApp();
   const createTripMutation = useCreateTrip();
+  const { data: friendsData } = useFriends();
+  const friends = friendsData?.friends ?? [];
 
   const [step, setStep] = useState<'selection' | 'form'>('selection');
   const [role, setRole] = useState<'driver' | 'passenger'>('driver');
@@ -40,11 +53,33 @@ export default function CreateTripScreen() {
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [tempHour, setTempHour] = useState('08');
   const [tempMin, setTempMin] = useState('30');
-  const [groupName, setGroupName] = useState(lang === 'zh' ? '拼车小组' : 'Carpool Group');
+
+  const currentUserArn = user?.userArn ?? user?.id ?? '';
+  const defaultGroupName = user?.name ? (lang === 'zh' ? `${user.name} 的小组` : `${user.name}'s Group`) : (lang === 'zh' ? '我的小组' : 'My Group');
+
+  useEffect(() => {
+    if (role === 'passenger' && !draftPassengerGroup && currentUserArn) {
+      setDraftPassengerGroup({ groupName: defaultGroupName, userIds: [currentUserArn] });
+    }
+  }, [role, draftPassengerGroup, currentUserArn, defaultGroupName, setDraftPassengerGroup]);
+
+  const draft = draftPassengerGroup ?? { groupName: defaultGroupName, userIds: [currentUserArn] };
+  const draftMembers = draft.userIds.map((id) => {
+    if (id === currentUserArn) return { id, name: user?.name ?? 'Me', avatar: user?.avatar ?? DEFAULT_AVATAR };
+    const f = friends.find((x) => x.userArn === id);
+    return { id, name: f?.name?.trim() || id.split(/[:/]/).pop() || id, avatar: f?.imageUrl ?? DEFAULT_AVATAR };
+  });
+  const displayCount = draftMembers.length;
+  const extraCount = displayCount > MAX_AVATARS ? displayCount - MAX_AVATARS : 0;
+  const avatarsToShow = draftMembers.slice(0, MAX_AVATARS);
 
   const handleSubmit = async () => {
     if (!origin.trim() || !destination.trim()) {
       Alert.alert(lang === 'zh' ? '请填写起点和终点' : 'Please fill in origin and destination');
+      return;
+    }
+    if (role === 'passenger' && (!draftPassengerGroup || draftPassengerGroup.userIds.length === 0)) {
+      Alert.alert(lang === 'zh' ? '请配置乘客小组' : 'Please configure passenger group');
       return;
     }
     const [hours, minutes] = selectedTime.split(':');
@@ -53,9 +88,16 @@ export default function CreateTripScreen() {
     const startTimeTimestamp = startTimeDate.getTime();
 
     const userId = (user?.userArn ?? user?.id) as string;
-    const groupUsers = [
-      { userId, name: user?.name ?? 'User', imageUrl: user?.avatar, accept: true },
-    ];
+    const groupUsers =
+      role === 'passenger' && draftPassengerGroup
+        ? draftPassengerGroup.userIds.map((id) => {
+            if (id === userId) return { userId: id, name: user?.name ?? 'User', imageUrl: user?.avatar ?? undefined, accept: true };
+            const f = friends.find((x) => x.userArn === id);
+            return { userId: id, name: f?.name ?? id, imageUrl: f?.imageUrl ?? undefined, accept: true };
+          })
+        : [{ userId, name: user?.name ?? 'User', imageUrl: user?.avatar, accept: true }];
+
+    const groupNameToUse = role === 'passenger' && draftPassengerGroup ? draftPassengerGroup.groupName : defaultGroupName;
 
     try {
       const newTrip = await createTripMutation.mutateAsync({
@@ -78,7 +120,7 @@ export default function CreateTripScreen() {
                 {
                   groupArn: '',
                   tripArn: '',
-                  groupName,
+                  groupName: groupNameToUse,
                   start: origin,
                   destination,
                   pickupTime: startTimeTimestamp,
@@ -230,15 +272,31 @@ export default function CreateTripScreen() {
         {role === 'passenger' && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>{t.configureGroup}</Text>
-            <View style={styles.groupCard}>
-              <TextInput
-                style={styles.groupNameInput}
-                value={groupName}
-                onChangeText={setGroupName}
-                placeholder={lang === 'zh' ? '小组名称' : 'Group name'}
-                placeholderTextColor={colors.slate[300]}
-              />
-            </View>
+            <Pressable
+              onPress={() => navigation.navigate('ConfigureDraftGroup')}
+              style={({ pressed }) => [styles.groupSummaryCard, pressed && styles.pressed]}
+            >
+              <View style={styles.groupSummaryAvatars}>
+                {avatarsToShow.map((member, idx) => (
+                  <View
+                    key={member.id}
+                    style={[
+                      styles.groupSummaryAvatarWrap,
+                      { marginLeft: idx === 0 ? 0 : AVATAR_OVERLAP, zIndex: MAX_AVATARS - idx },
+                    ]}
+                  >
+                    <Image source={{ uri: member.avatar }} style={styles.groupSummaryAvatar} />
+                  </View>
+                ))}
+                {extraCount > 0 && (
+                  <View style={[styles.groupSummaryAvatarWrap, styles.groupSummaryExtra, { marginLeft: AVATAR_OVERLAP, zIndex: 0 }]}>
+                    <Text style={styles.groupSummaryExtraText}>+{extraCount}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.groupSummaryName} numberOfLines={1}>{draft.groupName || defaultGroupName}</Text>
+              <Icon name="chevron_right" size={20} color={colors.slate[400]} style={styles.groupSummaryChevron} />
+            </Pressable>
           </View>
         )}
 
@@ -451,20 +509,35 @@ const styles = StyleSheet.create({
   dropdownRowIcon: { width: 40, height: 40, borderRadius: 8, backgroundColor: colors.slate[100] },
   dropdownRowText: { flex: 1, fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800] },
   dropdownRowSub: { fontSize: 9, fontWeight: '800', color: colors.slate[400] },
-  groupCard: {
+  pressed: { opacity: 0.9 },
+  groupSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: spacing.p4,
     backgroundColor: colors.slate[50],
     borderRadius: 28,
     borderWidth: 1,
     borderColor: colors.slate[100],
   },
-  groupNameInput: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.slate[800],
-    marginBottom: spacing.gap3,
-    paddingVertical: 4,
+  groupSummaryAvatars: { flexDirection: 'row', alignItems: 'center' },
+  groupSummaryAvatarWrap: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: colors.slate[200],
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.white,
   },
+  groupSummaryAvatar: { width: '100%', height: '100%' },
+  groupSummaryExtra: {
+    backgroundColor: colors.sage,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupSummaryExtraText: { fontSize: 12, fontWeight: '800', color: colors.white },
+  groupSummaryName: { flex: 1, fontSize: fontSize.sm, fontWeight: '700', color: colors.slate[800], marginLeft: spacing.gap3 },
+  groupSummaryChevron: { marginLeft: spacing.gap2 },
   row2: { flexDirection: 'row', gap: spacing.gap4 },
   half: { flex: 1 },
   input: {

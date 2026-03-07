@@ -88,6 +88,8 @@ export interface UserTripListItem {
   driverConfirmed: boolean;
   userTripArn: string;
   userTripStatus: string;
+  /** Present only for passengers – the ARN of the user group this passenger belongs to; omitted for drivers. */
+  userGroupArn?: string;
 }
 
 export interface GetTripByIdResponse {
@@ -141,17 +143,24 @@ export interface UpdateUserGroupParams {
 }
 
 function getMockTripListItems(completed: boolean): UserTripListItem[] {
-  return (MOCK_TRIPS as TripMetadata[]).map((t) => ({
-    tripArn: t.tripArn,
-    startTime: t.startTime,
-    status: t.status,
-    start: t.locations[0]?.locationName ?? '',
-    destination: t.locations[t.locations.length - 1]?.locationName ?? '',
-    isDriver: (t.driver ?? '').replace('user:', '') === 'user-1' || t.driver === 'user_1',
-    driverConfirmed: t.driverConfirmed ?? false,
-    userTripArn: `mock-utrip-${t.tripArn}`,
-    userTripStatus: (t as TripMetadata & { userTripStatus?: string }).userTripStatus ?? '',
-  })).filter((t) => (completed ? t.status === 'Completed' : t.status !== 'Completed'));
+  return (MOCK_TRIPS as TripMetadata[]).map((t) => {
+    const isDriver = (t.driver ?? '').replace('user:', '') === 'user-1' || t.driver === 'user_1';
+    const item: UserTripListItem = {
+      tripArn: t.tripArn,
+      startTime: t.startTime,
+      status: t.status,
+      start: t.locations[0]?.locationName ?? '',
+      destination: t.locations[t.locations.length - 1]?.locationName ?? '',
+      isDriver,
+      driverConfirmed: t.driverConfirmed ?? false,
+      userTripArn: `mock-utrip-${t.tripArn}`,
+      userTripStatus: (t as TripMetadata & { userTripStatus?: string }).userTripStatus ?? '',
+    };
+    if (!isDriver && (t as TripMetadata & { userGroupArn?: string }).userGroupArn) {
+      item.userGroupArn = (t as TripMetadata & { userGroupArn?: string }).userGroupArn;
+    }
+    return item;
+  }).filter((t) => (completed ? t.status === 'Completed' : t.status !== 'Completed'));
 }
 
 const TRIP_LOAD_LOG = '[TripService.listTrips]';
@@ -182,15 +191,18 @@ export const listTrips = async (params: ListTripsParams): Promise<{ trips: UserT
   }
 };
 
+const TRIP_DETAIL_LOG = '[TripService.getTripDetails]';
+
 export const getTripDetails = async (tripArn: string): Promise<GetTripByIdResponse> => {
   const mockTrip = (MOCK_TRIPS as (TripMetadata & { userTripStatus?: string })[]).find((t) => t.tripArn === tripArn);
   if (mockTrip) {
-    return {
-      trip: mockTrip,
-      status: { userTripStatus: mockTrip.userTripStatus },
-    };
+    const out = { trip: mockTrip, status: { userTripStatus: mockTrip.userTripStatus } };
+    if (__DEV__) console.log(TRIP_DETAIL_LOG, 'mock response', { tripArn, status: out.status });
+    return out;
   }
-  return api.get<GetTripByIdResponse>(`/api/trips/${encodeURIComponent(tripArn)}`);
+  const response = await api.get<GetTripByIdResponse>(`/api/trips/${encodeURIComponent(tripArn)}`);
+  if (__DEV__) console.log(TRIP_DETAIL_LOG, 'API response', { tripArn, status: response?.status, statusKeys: response?.status ? Object.keys(response.status) : [] });
+  return response;
 };
 
 export const createTrip = async (params: CreateTripParams): Promise<TripMetadata> => {
@@ -224,6 +236,14 @@ export const becomeDriver = async (tripArn: string): Promise<TripMetadata> => {
   return api.post<TripMetadata>(`/api/trips/${encodeURIComponent(tripArn)}/driver`);
 };
 
+export const inviteDriver = async (tripArn: string, params?: { userId?: string }): Promise<TripMetadata> => {
+  return api.post<TripMetadata>(`/api/trips/${encodeURIComponent(tripArn)}/invite-driver`, params ?? {});
+};
+
+export const acceptDriverInvitation = async (tripArn: string): Promise<TripMetadata> => {
+  return api.post<TripMetadata>(`/api/trips/${encodeURIComponent(tripArn)}/accept-driver-invitation`);
+};
+
 export const listTripUsers = async (tripArn: string): Promise<{ users: UserTrip[] }> => {
   return api.get<{ users: UserTrip[] }>(`/api/trips/${encodeURIComponent(tripArn)}/users`);
 };
@@ -249,8 +269,18 @@ export const acceptInvitation = async (groupArn: string): Promise<UserGroupRecor
   return api.post<UserGroupRecord>(`/api/user-groups/${encodeURIComponent(groupArn)}/accept`);
 };
 
+const USER_GROUP_GET_LOG = '[TripService.getUserGroup]';
+
 export const getUserGroup = async (groupArn: string): Promise<UserGroupRecord> => {
-  return api.get<UserGroupRecord>(`/api/user-groups/${encodeURIComponent(groupArn)}`);
+  if (__DEV__) console.log(USER_GROUP_GET_LOG, 'request', { groupArn });
+  try {
+    const out = await api.get<UserGroupRecord>(`/api/user-groups/${encodeURIComponent(groupArn)}`);
+    if (__DEV__) console.log(USER_GROUP_GET_LOG, 'success', { groupArn, groupName: out?.groupName });
+    return out;
+  } catch (err) {
+    if (__DEV__) console.warn(USER_GROUP_GET_LOG, 'error', { groupArn, error: err instanceof Error ? err.message : err });
+    throw err;
+  }
 };
 
 export default {
@@ -262,6 +292,8 @@ export default {
   arriveLocation,
   leaveTrip,
   becomeDriver,
+  inviteDriver,
+  acceptDriverInvitation,
   listTripUsers,
   createUserGroup,
   updateUserGroup,

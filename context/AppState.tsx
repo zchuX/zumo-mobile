@@ -41,6 +41,9 @@ export interface AppStateContextValue {
   setNicknames: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   notes: Record<string, string>;
   setNotes: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  /** Draft passenger group for Post Trip (looking for a car). Persisted until Confirm and Generate Trip. */
+  draftPassengerGroup: { groupName: string; userIds: string[] } | null;
+  setDraftPassengerGroup: React.Dispatch<React.SetStateAction<{ groupName: string; userIds: string[] } | null>>;
 }
 
 const initialInvitation = null as AppStateContextValue['invitationDetails'];
@@ -70,6 +73,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [incomingRequestIds, setIncomingRequestIds] = useState<Set<string>>(new Set(defaultIncomingRequestIds));
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [draftPassengerGroup, setDraftPassengerGroup] = useState<{ groupName: string; userIds: string[] } | null>(null);
 
   const t = useMemo(() => TRANSLATIONS[lang] ?? TRANSLATIONS.en, [lang]);
 
@@ -112,6 +116,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setNicknames,
       notes,
       setNotes,
+      draftPassengerGroup,
+      setDraftPassengerGroup,
     }),
     [
       user,
@@ -133,6 +139,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       incomingRequestIds,
       nicknames,
       notes,
+      draftPassengerGroup,
     ]
   );
 
